@@ -1,0 +1,4 @@
+module HTMLParsing [system] {
+       header "html_parsing-Bridging-Header.h"
+       export *
+}

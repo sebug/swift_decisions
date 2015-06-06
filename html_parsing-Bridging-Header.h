@@ -1,0 +1,1 @@
+void getInput(int *output);
