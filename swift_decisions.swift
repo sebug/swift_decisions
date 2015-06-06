@@ -1,4 +1,5 @@
 import Foundation
+import Hpple
 let agendaURL = "http://www.ville-geneve.ch/agenda/"
 
 func getDateArgument(args: [String]) -> NSDate? {

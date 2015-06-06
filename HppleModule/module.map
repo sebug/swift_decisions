@@ -1,0 +1,6 @@
+module Hpple [system] {
+       header "../hpple/Pod/Classes/TFHpple.h"
+       header "../hpple/Pod/Classes/TFHppleElement.h"
+       header "../hpple/Pod/Classes/XPathQuery.h"
+       export *
+}
