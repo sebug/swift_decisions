@@ -1,5 +1,4 @@
 import Foundation
-import HTMLParsing
 let agendaURL = "http://www.ville-geneve.ch/agenda/"
 
 func getDateArgument(args: [String]) -> NSDate? {
@@ -30,13 +29,8 @@ func formatDateForURL(date: NSDate) -> String {
 func getInitialPage(signalCompletion: () -> ()) -> NSURLSessionDataTask? {
     if let url = NSURL(string: agendaURL) {
         let fetchTask = NSURLSession.sharedSession().dataTaskWithURL(url) {(data, _, _) in
-            let body = NSString(data: data, encoding: NSUTF8StringEncoding)
-
-            var output: CInt = 0
-            getInput(&output)
-
-            println(output)
-            
+            if let body = NSString(data: data, encoding: NSUTF8StringEncoding) {
+            }
             
             signalCompletion()
         }
