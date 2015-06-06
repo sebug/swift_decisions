@@ -33,7 +33,7 @@ func getInitialPage(signalCompletion: () -> ()) -> NSURLSessionDataTask? {
             let body = NSString(data: data, encoding: NSUTF8StringEncoding)
 
             var output: CInt = 0
-            getInput(output)
+            getInput(&output)
 
             println(output)
             
