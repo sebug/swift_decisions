@@ -1,3 +1,4 @@
 #!/bin/sh
-swiftc swift_decisions.swift
+platform=$(xcrun --sdk macosx --show-sdk-path)
+swiftc -sdk $platform swift_decisions.swift
 

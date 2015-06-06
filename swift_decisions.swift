@@ -1,5 +1,8 @@
+import Foundation
+
 func getDateArgument() -> String? {
     if Process.arguments.count >= 2 {
+        let dateFormatter = NSDateFormatter()
         return Process.arguments[1]
     } else {
         return nil
