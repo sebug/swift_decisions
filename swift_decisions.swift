@@ -21,25 +21,69 @@ func dateOrNow(dateOpt: NSDate?) -> NSDate {
     }
 }
 
+func getFormFilterNode(parser: TFHpple) -> TFHppleElement? {
+    let nodes = parser.searchWithXPathQuery("//form[@name='formFilter']")
+    if nodes.count >= 1 {
+        return (nodes[0] as! TFHppleElement)
+    } else {
+        return nil
+    }
+}
+
+func getPublics(baseElement: TFHppleElement) -> [String] {
+    let publicsNodes = baseElement.searchWithXPathQuery("//input[@type='checkbox']")
+    let thePublics =
+        publicsNodes.map({publicNode in
+        (publicNode as! TFHppleElement).attributes["value"] as! String
+                         })
+    return thePublics
+}
+
 func formatDateForURL(date: NSDate) -> String {
     let urlDateFormatter = NSDateFormatter()
     urlDateFormatter.dateFormat = "yyyyMMdd"
     return urlDateFormatter.stringFromDate(date)
 }
 
-func getInitialPage(signalCompletion: () -> ()) -> NSURLSessionDataTask? {
+func constructAgendaUrl(date: NSDate, publics: [String]) -> String {
+    let dateString = formatDateForURL(date)
+    let formEncodedPublics =
+        publics.map({p in
+        p.stringByReplacingOccurrencesOfString(" ", withString: "+")
+                    })
+    let publicsKvps =
+        formEncodedPublics.map({p in
+        "tx_displaycontroller%5Bpublic%5D%5B%5D=" + p
+                               })
+    let publicParams = publicsKvps.reduce("") {
+        $0 + "&" + $1
+    }
+    
+    return "\(agendaURL)?searchLocation=Recherche&tx_displaycontroller%5Blieux%5D=&tx_displaycontroller%5Bthemes%5D=&tx_displaycontroller%5Bgenres%5D=&tx_displaycontroller%5Bpublic%5D%5B%5D=Tout+afficher\(publicParams)&tx_displaycontroller%5BdatePickerStart%5D=\(dateString)&tx_displaycontroller%5BdatePickerEnd%5D=\(dateString)&no_cache=1&Submit=Filtrer"
+}
+
+func getSearchPage(date: NSDate, publics: [String], signalCompletion: () -> ()) {
+    let theUrl = constructAgendaUrl(date, publics)
+    println(theUrl)
+    signalCompletion()
+}
+
+func constructInitialPageCallbackWithDate(date: NSDate, signalCompletion: () -> ()) -> (NSData -> ()) {
+    return {data in
+        let parser = TFHpple(data: data, isXML: false)
+        if let formFilter = getFormFilterNode(parser) {
+            let thePublics = getPublics(formFilter)
+            getSearchPage(date, thePublics, signalCompletion)
+        } else {
+            signalCompletion()
+        }
+    }
+}
+
+func getInitialPage(cb: NSData -> ()) -> NSURLSessionDataTask? {
     if let url = NSURL(string: agendaURL) {
         let fetchTask = NSURLSession.sharedSession().dataTaskWithURL(url) {(data, _, _) in
-            if let body = NSString(data: data, encoding: NSUTF8StringEncoding) {
-                let htmlStart = body.rangeOfString("<html")
-                if let htmlData = body.substringWithRange(NSMakeRange(htmlStart.location,body.length - htmlStart.location)).dataUsingEncoding(NSUTF8StringEncoding) {
-                    let htmlParser = NSXMLParser(data: htmlData)
-                    let success = htmlParser.parse()
-                    println("Success? \(htmlParser.lineNumber)")
-                }
-            }
-            
-            signalCompletion()
+            cb(data)
         }
         fetchTask.resume()
         return fetchTask
@@ -47,15 +91,13 @@ func getInitialPage(signalCompletion: () -> ()) -> NSURLSessionDataTask? {
     return nil
 }
 
-println("Usage: swift_decisions [date]")
-let dateString = formatDateForURL(dateOrNow(getDateArgument(Process.arguments)))
-println("\(agendaURL)?tx_displaycontroller%5BdatePickerStart%5D=\(dateString)&tx_displaycontroller%5BdatePickerEnd%5D=\(dateString)")
 let semaphore = dispatch_semaphore_create(0)
 let signalCompletion = {
     () -> () in
     dispatch_semaphore_signal(semaphore)
 }
-if let getInitialPageTask = getInitialPage(signalCompletion) {
+let theCallback = constructInitialPageCallbackWithDate(dateOrNow(getDateArgument(Process.arguments)), signalCompletion)
+if let getInitialPageTask = getInitialPage(theCallback) {
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
 }
 
