@@ -28,8 +28,8 @@ func formatDateForURL(date: NSDate) -> String {
 
 func getInitialPage(signalCompletion: () -> ()) -> NSURLSessionDataTask? {
     if let url = NSURL(string: agendaURL) {
-        let fetchTask = NSURLSession.sharedSession().dataTaskWithURL(url) {(data, response, error) in
-            println(NSString(data: data, encoding: NSUTF8StringEncoding))
+        let fetchTask = NSURLSession.sharedSession().dataTaskWithURL(url) {(data, _, _) in
+            let body = NSString(data: data, encoding: NSUTF8StringEncoding)
             signalCompletion()
         }
         fetchTask.resume()
