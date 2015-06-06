@@ -62,28 +62,65 @@ func constructAgendaUrl(date: NSDate, publics: [String]) -> String {
     return "\(agendaURL)?searchLocation=Recherche&tx_displaycontroller%5Blieux%5D=&tx_displaycontroller%5Bthemes%5D=&tx_displaycontroller%5Bgenres%5D=&tx_displaycontroller%5Bpublic%5D%5B%5D=Tout+afficher\(publicParams)&tx_displaycontroller%5BdatePickerStart%5D=\(dateString)&tx_displaycontroller%5BdatePickerEnd%5D=\(dateString)&no_cache=1&Submit=Filtrer"
 }
 
-func getSearchPage(date: NSDate, publics: [String], signalCompletion: () -> ()) {
-    let theUrl = constructAgendaUrl(date, publics)
-    println(theUrl)
-    signalCompletion()
+func getSearchPage(session: NSURLSession, pageNumber: Int, date: NSDate, publics: [String], signalCompletion: () -> ()) {
+    if let url = NSURL(string: constructAgendaUrl(date, publics)) {
+        let searchPageTask = session.dataTaskWithURL(url) {(data, response, error) in
+            let parser = TFHpple(data: data, isXML: false)
+            let agendaNews = parser.searchWithXPathQuery("//div[@class='content_agenda_news']/ul/li")
+            if agendaNews.count >= 1 {
+
+                for item in agendaNews {
+                    let title = item.searchWithXPathQuery("//h3/a")
+                    if title.count == 1 {
+                        let theElement = title[0] as! TFHppleElement
+                        println("Title: \(theElement.content)")
+                    }
+                }
+                
+                let pages =
+                    parser.searchWithXPathQuery("//li[@class='tx-pagebrowse-pages']/ol/li")
+                
+                if (pages.count > pageNumber) {
+                    signalCompletion()
+                } else {
+                    signalCompletion()
+                }
+            } else {
+                signalCompletion()
+            }
+        }
+        searchPageTask.resume()
+    } else {
+        signalCompletion()
+    }
 }
 
-func constructInitialPageCallbackWithDate(date: NSDate, signalCompletion: () -> ()) -> (NSData -> ()) {
-    return {data in
+func publicIsForMe(pub: String) -> Bool {
+    return pub != "Tout afficher" &&
+           pub != "Petite enfance" &&
+           pub != "Enfants" &&
+           pub != "Adolescents"
+}
+
+func constructInitialPageCallbackWithDate(date: NSDate, signalCompletion: () -> ()) -> ((NSData, NSURLSession) -> ()) {
+    return {data, session in
         let parser = TFHpple(data: data, isXML: false)
         if let formFilter = getFormFilterNode(parser) {
             let thePublics = getPublics(formFilter)
-            getSearchPage(date, thePublics, signalCompletion)
+            let filteredPublics =
+                thePublics.filter(publicIsForMe)
+            getSearchPage(session, 1, date, filteredPublics, signalCompletion)
         } else {
             signalCompletion()
         }
     }
 }
 
-func getInitialPage(cb: NSData -> ()) -> NSURLSessionDataTask? {
+func getInitialPage(cb: (NSData, NSURLSession) -> ()) -> NSURLSessionDataTask? {
+    let theSession = NSURLSession.sharedSession()
     if let url = NSURL(string: agendaURL) {
-        let fetchTask = NSURLSession.sharedSession().dataTaskWithURL(url) {(data, _, _) in
-            cb(data)
+        let fetchTask = theSession.dataTaskWithURL(url) {(data, _, _) in
+            cb(data, theSession)
         }
         fetchTask.resume()
         return fetchTask
