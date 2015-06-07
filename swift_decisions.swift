@@ -62,29 +62,36 @@ func constructAgendaUrl(date: NSDate, publics: [String]) -> String {
     return "\(agendaURL)?searchLocation=Recherche&tx_displaycontroller%5Blieux%5D=&tx_displaycontroller%5Bthemes%5D=&tx_displaycontroller%5Bgenres%5D=&tx_displaycontroller%5Bpublic%5D%5B%5D=Tout+afficher\(publicParams)&tx_displaycontroller%5BdatePickerStart%5D=\(dateString)&tx_displaycontroller%5BdatePickerEnd%5D=\(dateString)&no_cache=1&Submit=Filtrer"
 }
 
+struct AgendaOverviewItem {
+    let title: String
+}
+
 func getSearchPage(session: NSURLSession, pageNumber: Int, date: NSDate, publics: [String], signalCompletion: () -> ()) {
     if let url = NSURL(string: constructAgendaUrl(date, publics)) {
         let searchPageTask = session.dataTaskWithURL(url) {(data, response, error) in
             let parser = TFHpple(data: data, isXML: false)
             let agendaNews = parser.searchWithXPathQuery("//div[@class='content_agenda_news']/ul/li")
             if agendaNews.count >= 1 {
-
-                for item in agendaNews {
-                    let title = item.searchWithXPathQuery("//h3/a")
-                    if title.count == 1 {
-                        let theElement = title[0] as! TFHppleElement
-                        println("Title: \(theElement.content)")
+                let agendaItems = agendaNews.map {
+                    (item) -> AgendaOverviewItem?
+                    in
+                    if let titleQuery = item.searchWithXPathQuery("//h3/a") {
+                        if titleQuery.count >= 1 {
+                            let theElement = titleQuery[0] as! TFHppleElement
+                            return AgendaOverviewItem(title: theElement.content)
+                        } else {
+                            return nil
+                        }
+                    } else {
+                        return nil
                     }
                 }
                 
-                let pages =
-                    parser.searchWithXPathQuery("//li[@class='tx-pagebrowse-pages']/ol/li")
-                
-                if (pages.count > pageNumber) {
-                    signalCompletion()
-                } else {
-                    signalCompletion()
+                for agendaItem in agendaItems {
+                    println(agendaItem)
                 }
+
+                signalCompletion()
             } else {
                 signalCompletion()
             }
