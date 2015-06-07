@@ -201,15 +201,16 @@ func displayAgendaItems(items: [AgendaOverviewItem]) {
 }
 
 let semaphore = dispatch_semaphore_create(0)
-let signalCompletion = {
-    (agendaItems: [AgendaOverviewItem]) -> () in
-
-    displayAgendaItems(agendaItems)
+if let getInitialPageTask = getInitialPage(
+           constructInitialPageCallbackWithDate(
+               dateOrNow(getDateArgument(Process.arguments)),
+               {
+                   (agendaItems: [AgendaOverviewItem]) -> () in
+                   
+                   displayAgendaItems(agendaItems)
     
-    dispatch_semaphore_signal(semaphore)
-}
-let theCallback = constructInitialPageCallbackWithDate(dateOrNow(getDateArgument(Process.arguments)), signalCompletion)
-if let getInitialPageTask = getInitialPage(theCallback) {
+                   dispatch_semaphore_signal(semaphore)
+               })) {
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
 }
 
