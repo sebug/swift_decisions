@@ -65,23 +65,55 @@ func constructAgendaUrl(date: NSDate, publics: [String]) -> String {
 
 struct AgendaOverviewItem {
     let title: String
+    let tag: String
+    let description: String?
 }
 
 func displayAgendaItems(items: [AgendaOverviewItem]) {
     for agendaItem in items {
-        println(agendaItem)
+        println("* \(agendaItem.title)")
+        println("  \(agendaItem.tag)")
+        if let description = agendaItem.description {
+            println(description)
+        }
+        println("")
     }
 }
 
 func getNextPageLink(parser: TFHpple) -> NSURL? {
     let suivante = parser.searchWithXPathQuery("//li[@class='tx-pagebrowse-next']")
     if suivante.count >= 1 {
-        let theLink = suivante[0].searchWithXPathQuery("//a/@href")
-        if (theLink.count >= 1) {
-            return NSURL(string: villeGeneveURL + theLink[0].content)
+        let aElements = suivante[0].searchWithXPathQuery("//a")
+        if (aElements.count > 0) {
+            let absolutePath =
+                (aElements[0] as! TFHppleElement).attributes["href"] as! String
+            return NSURL(string: villeGeneveURL + absolutePath)
+        } else {
+            return nil
         }
     }
     return nil
+}
+
+func getContentString(item: TFHppleElement, query: String) -> String? {
+    if let contentQuery = item.searchWithXPathQuery(query) {
+        if contentQuery.count >= 1 {
+            return (contentQuery[0] as! TFHppleElement).content as String
+        }
+    }
+    return nil    
+}
+
+func getTitle(item: TFHppleElement) -> String? {
+    return getContentString(item, "//h3/a")
+}
+
+func getTag(item: TFHppleElement) -> String? {
+    return getContentString(item, "//p[@class='tagNews']")
+}
+
+func getDescription(item: TFHppleElement) -> String? {
+    return getContentString(item, "//p[preceding::p[@class='tagNews']]")
 }
 
 func getAgendaNews(parser: TFHpple) -> [AgendaOverviewItem] {
@@ -90,16 +122,13 @@ func getAgendaNews(parser: TFHpple) -> [AgendaOverviewItem] {
         let agendaItems = agendaNews.map {
             (item) -> AgendaOverviewItem?
             in
-            if let titleQuery = item.searchWithXPathQuery("//h3/a") {
-                if titleQuery.count >= 1 {
-                    let theElement = titleQuery[0] as! TFHppleElement
-                    return AgendaOverviewItem(title: theElement.content)
-                } else {
-                    return nil
+            let strongItem = item as! TFHppleElement
+            if let title = getTitle(strongItem) {
+                if let tag = getTag(strongItem) {
+                    return AgendaOverviewItem(title: title, tag: tag, description: getDescription(strongItem))
                 }
-            } else {
-                return nil
             }
+            return nil
         }
         return agendaItems.filter({ $0 != nil }).map({ $0! })
     } else {
@@ -107,12 +136,20 @@ func getAgendaNews(parser: TFHpple) -> [AgendaOverviewItem] {
     }
 }
 
-func getPageFromLink(session: NSURLSession, url: NSURL, items: [AgendaOverviewItem], signalCompletion: () -> ()) {
-    let fetchPageTask = session.dataTaskWithURL(url) { (data, response, error) in
-        println("Second page fetched")
-        
+func nextStep(session: NSURLSession, parser: TFHpple, items: [AgendaOverviewItem], signalCompletion: () -> ()) {
+    if let url = getNextPageLink(parser) {
+        getPageFromLink(session, url, items, signalCompletion)
+    } else {
         displayAgendaItems(items)
         signalCompletion()
+    }
+}
+
+func getPageFromLink(session: NSURLSession, url: NSURL, items: [AgendaOverviewItem], signalCompletion: () -> ()) {
+    let fetchPageTask = session.dataTaskWithURL(url) { (data, response, error) in
+        let parser = TFHpple(data: data, isXML: false)
+        let furtherAgendaItems = getAgendaNews(parser)
+        nextStep(session, parser, items + furtherAgendaItems, signalCompletion)
     }
     fetchPageTask.resume()
 }
@@ -121,13 +158,8 @@ func getSearchPage(session: NSURLSession, date: NSDate, publics: [String], signa
     if let url = NSURL(string: constructAgendaUrl(date, publics)) {
         let searchPageTask = session.dataTaskWithURL(url) {(data, response, error) in
             let parser = TFHpple(data: data, isXML: false)
-            let nonEmptyAgendaItems = getAgendaNews(parser)
-            if let url = getNextPageLink(parser) {
-                getPageFromLink(session, url, nonEmptyAgendaItems, signalCompletion)
-            } else {
-                displayAgendaItems(nonEmptyAgendaItems)
-                signalCompletion()
-            }
+            let items = getAgendaNews(parser)
+            nextStep(session, parser, items, signalCompletion)
         }
         searchPageTask.resume()
     } else {
@@ -139,7 +171,8 @@ func publicIsForMe(pub: String) -> Bool {
     return pub != "Tout afficher" &&
            pub != "Petite enfance" &&
            pub != "Enfants" &&
-           pub != "Adolescents"
+           pub != "Adolescents" &&
+           pub != "Seniors"
 }
 
 func constructInitialPageCallbackWithDate(date: NSDate, signalCompletion: () -> ()) -> ((NSData, NSURLSession) -> ()) {
