@@ -1,6 +1,7 @@
 import Foundation
 import Hpple
-let agendaURL = "http://www.ville-geneve.ch/agenda/"
+let villeGeneveURL = "http://www.ville-geneve.ch"
+let agendaURL = villeGeneveURL + "/agenda/"
 
 func getDateArgument(args: [String]) -> NSDate? {
     if args.count >= 2 {
@@ -66,33 +67,65 @@ struct AgendaOverviewItem {
     let title: String
 }
 
-func getSearchPage(session: NSURLSession, pageNumber: Int, date: NSDate, publics: [String], signalCompletion: () -> ()) {
+func displayAgendaItems(items: [AgendaOverviewItem]) {
+    for agendaItem in items {
+        println(agendaItem)
+    }
+}
+
+func getNextPageLink(parser: TFHpple) -> NSURL? {
+    let suivante = parser.searchWithXPathQuery("//li[@class='tx-pagebrowse-next']")
+    if suivante.count >= 1 {
+        let theLink = suivante[0].searchWithXPathQuery("//a/@href")
+        if (theLink.count >= 1) {
+            return NSURL(string: villeGeneveURL + theLink[0].content)
+        }
+    }
+    return nil
+}
+
+func getAgendaNews(parser: TFHpple) -> [AgendaOverviewItem] {
+    let agendaNews = parser.searchWithXPathQuery("//div[@class='content_agenda_news']/ul/li")
+    if agendaNews.count >= 1 {
+        let agendaItems = agendaNews.map {
+            (item) -> AgendaOverviewItem?
+            in
+            if let titleQuery = item.searchWithXPathQuery("//h3/a") {
+                if titleQuery.count >= 1 {
+                    let theElement = titleQuery[0] as! TFHppleElement
+                    return AgendaOverviewItem(title: theElement.content)
+                } else {
+                    return nil
+                }
+            } else {
+                return nil
+            }
+        }
+        return agendaItems.filter({ $0 != nil }).map({ $0! })
+    } else {
+        return []
+    }
+}
+
+func getPageFromLink(session: NSURLSession, url: NSURL, items: [AgendaOverviewItem], signalCompletion: () -> ()) {
+    let fetchPageTask = session.dataTaskWithURL(url) { (data, response, error) in
+        println("Second page fetched")
+        
+        displayAgendaItems(items)
+        signalCompletion()
+    }
+    fetchPageTask.resume()
+}
+
+func getSearchPage(session: NSURLSession, date: NSDate, publics: [String], signalCompletion: () -> ()) {
     if let url = NSURL(string: constructAgendaUrl(date, publics)) {
         let searchPageTask = session.dataTaskWithURL(url) {(data, response, error) in
             let parser = TFHpple(data: data, isXML: false)
-            let agendaNews = parser.searchWithXPathQuery("//div[@class='content_agenda_news']/ul/li")
-            if agendaNews.count >= 1 {
-                let agendaItems = agendaNews.map {
-                    (item) -> AgendaOverviewItem?
-                    in
-                    if let titleQuery = item.searchWithXPathQuery("//h3/a") {
-                        if titleQuery.count >= 1 {
-                            let theElement = titleQuery[0] as! TFHppleElement
-                            return AgendaOverviewItem(title: theElement.content)
-                        } else {
-                            return nil
-                        }
-                    } else {
-                        return nil
-                    }
-                }
-                
-                for agendaItem in agendaItems {
-                    println(agendaItem)
-                }
-
-                signalCompletion()
+            let nonEmptyAgendaItems = getAgendaNews(parser)
+            if let url = getNextPageLink(parser) {
+                getPageFromLink(session, url, nonEmptyAgendaItems, signalCompletion)
             } else {
+                displayAgendaItems(nonEmptyAgendaItems)
                 signalCompletion()
             }
         }
@@ -116,7 +149,7 @@ func constructInitialPageCallbackWithDate(date: NSDate, signalCompletion: () -> 
             let thePublics = getPublics(formFilter)
             let filteredPublics =
                 thePublics.filter(publicIsForMe)
-            getSearchPage(session, 1, date, filteredPublics, signalCompletion)
+            getSearchPage(session, date, filteredPublics, signalCompletion)
         } else {
             signalCompletion()
         }
