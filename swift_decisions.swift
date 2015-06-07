@@ -125,15 +125,15 @@ func getAgendaNews(parser: TFHpple) -> [AgendaOverviewItem] {
     }
 }
 
-func nextStep(session: NSURLSession, parser: TFHpple, items: [AgendaOverviewItem], signalCompletion: (agendaItems: [AgendaOverviewItem]) -> ()) {
+func nextStep(session: NSURLSession, parser: TFHpple, items: [AgendaOverviewItem], signalCompletion: ([AgendaOverviewItem]) -> ()) {
     if let url = getNextPageLink(parser) {
         getPageFromLink(session, url, items, signalCompletion)
     } else {
-        signalCompletion(agendaItems: items)
+        signalCompletion(items)
     }
 }
 
-func getPageFromLink(session: NSURLSession, url: NSURL, items: [AgendaOverviewItem], signalCompletion: (agendaItems: [AgendaOverviewItem]) -> ()) {
+func getPageFromLink(session: NSURLSession, url: NSURL, items: [AgendaOverviewItem], signalCompletion: ([AgendaOverviewItem]) -> ()) {
     let fetchPageTask = session.dataTaskWithURL(url) { (data, response, error) in
         let parser = TFHpple(data: data, isXML: false)
         let furtherAgendaItems = getAgendaNews(parser)
@@ -142,7 +142,7 @@ func getPageFromLink(session: NSURLSession, url: NSURL, items: [AgendaOverviewIt
     fetchPageTask.resume()
 }
 
-func getSearchPage(session: NSURLSession, date: NSDate, publics: [String], signalCompletion: (agendaItems: [AgendaOverviewItem]) -> ()) {
+func getSearchPage(session: NSURLSession, date: NSDate, publics: [String], signalCompletion: ([AgendaOverviewItem]) -> ()) {
     if let url = NSURL(string: constructAgendaUrl(date, publics)) {
         let searchPageTask = session.dataTaskWithURL(url) {(data, response, error) in
             let parser = TFHpple(data: data, isXML: false)
@@ -151,7 +151,7 @@ func getSearchPage(session: NSURLSession, date: NSDate, publics: [String], signa
         }
         searchPageTask.resume()
     } else {
-        signalCompletion(agendaItems: [])
+        signalCompletion([])
     }
 }
 
@@ -163,7 +163,7 @@ func publicIsForMe(pub: String) -> Bool {
            pub != "Seniors"
 }
 
-func constructInitialPageCallbackWithDate(date: NSDate, signalCompletion: (agendaItems: [AgendaOverviewItem]) -> ()) -> ((NSData, NSURLSession) -> ()) {
+func constructInitialPageCallbackWithDate(date: NSDate, signalCompletion: ([AgendaOverviewItem]) -> ()) -> ((NSData, NSURLSession) -> ()) {
     return {data, session in
         let parser = TFHpple(data: data, isXML: false)
         if let formFilter = getFormFilterNode(parser) {
@@ -172,21 +172,18 @@ func constructInitialPageCallbackWithDate(date: NSDate, signalCompletion: (agend
                 thePublics.filter(publicIsForMe)
             getSearchPage(session, date, filteredPublics, signalCompletion)
         } else {
-            signalCompletion(agendaItems: [])
+            signalCompletion([])
         }
     }
 }
 
-func getInitialPage(cb: (NSData, NSURLSession) -> ()) -> NSURLSessionDataTask? {
+func getInitialPage(url: NSURL, cb: (NSData, NSURLSession) -> ()) -> NSURLSessionDataTask? {
     let theSession = NSURLSession.sharedSession()
-    if let url = NSURL(string: agendaURL) {
-        let fetchTask = theSession.dataTaskWithURL(url) {(data, _, _) in
-            cb(data, theSession)
-        }
-        fetchTask.resume()
-        return fetchTask
+    let fetchTask = theSession.dataTaskWithURL(url) {(data, _, _) in
+        cb(data, theSession)
     }
-    return nil
+    fetchTask.resume()
+    return fetchTask
 }
 
 func displayAgendaItems(items: [AgendaOverviewItem]) {
@@ -200,20 +197,22 @@ func displayAgendaItems(items: [AgendaOverviewItem]) {
     }
 }
 
-let semaphore = dispatch_semaphore_create(0)
-if let getInitialPageTask = getInitialPage(
-           constructInitialPageCallbackWithDate(
-               dateOrNow(getDateArgument(Process.arguments)),
-               {
-                   (agendaItems: [AgendaOverviewItem]) -> () in
+if let baseAgendaURL = NSURL(string: agendaURL) {
+    let semaphore = dispatch_semaphore_create(0)
+
+    getInitialPage(
+               baseAgendaURL,
+               constructInitialPageCallbackWithDate(
+                   dateOrNow(getDateArgument(Process.arguments)),
+                   {
+                       (agendaItems: [AgendaOverviewItem]) -> () in
                    
-                   displayAgendaItems(agendaItems)
+                       displayAgendaItems(agendaItems)
     
-                   dispatch_semaphore_signal(semaphore)
-               })) {
+                       dispatch_semaphore_signal(semaphore)
+                   }))
     dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER)
 }
-
 
 
 
